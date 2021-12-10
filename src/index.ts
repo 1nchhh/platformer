@@ -106,21 +106,27 @@ class GamePlayer implements GamePlayerType {
                 // @ts-ignore
                 this.rawpos[dir] += this.momentum[dir];
                 // @ts-ignore
-                let momentum = this.momentum[dir];
-                if (momentum > this.inc / 2) {
-                    momentum -= momentum / 3;
-                }
-                if (momentum < -this.inc / 2) {
-                    momentum += momentum / 3;
-                }
+                let m = Math.abs(this.momentum[dir]) == this.momentum[dir] ? (this.momentum[dir] * .9) : (this.momentum[dir] / .9);
+                if (Math.abs(Math.round(m * 100) / 100) < .01 && dir == 'y') m = -m;
+                if (Math.abs(Math.round(m * 100) / 100) === this.inc) m = 0;
                 // @ts-ignore
-                this.momentum[dir] = momentum;
+                if (dir == 'y') this.momentum[dir] = this.momentum[dir] > 0 ? m : -m;
+                this.pos[dir] = Math.round(this.rawpos[dir]);
                 // @ts-ignore
-                if (Math.round(this.momentum[dir] * 10) / 10 == 0) {
+                this.momentum[dir] = m;
+                // @ts-ignore
+                if (dir == 'y' && this.pos[dir] === this.momentum.startpos[dir]) {
                     // @ts-ignore
                     this.momentum.startpos[dir] = null;
                     // @ts-ignore
-                    this.momentum[dir] = 0;
+                    this.momentum[dir] = 0
+                };
+                // @ts-ignore
+                if (dir == 'x' && (this.pos[dir] === this.momentum.startpos[dir] - this.inc || this.pos[dir] === this.momentum.startpos[dir] + this.inc)) {
+                    // @ts-ignore
+                    this.momentum.startpos[dir] = null;
+                    // @ts-ignore
+                    this.momentum[dir] = 0
                 }
             }
         }, 100);
@@ -184,6 +190,6 @@ class Game implements GameType {
     }
 }
 
-const game = new Game('white', 'black', columns, rows, 60, 8);
+const game = new Game('white', 'black', columns, rows, 60, 4);
 console.clear();
 game.render();
