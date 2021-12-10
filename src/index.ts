@@ -14,29 +14,26 @@ process.stdin.on('keypress', (str, key) => {
 
 // console based platformer
 
-const { rows: _rows, columns: _columns } = process.stdout;
-const rows = _rows - 1;
-const columns = _columns - 1;
+const { rows, columns } = process.stdout;
 
 const block = '█'
 
 interface GamePlayerType {
-    pos: {
-        x: number;
-        y: number
-    };
-    rawpos: {
-        x: number;
-        y: number
-    };
+    pos: Record<string, number>;
+    rawpos: Record<string, number>;
     momentum: {
         x: number;
-        y: number
+        y: number;
+        startpos: {
+            x: number | null;
+            y: number | null;
+        }
     };
     fps: number;
     color: string;
     columns: number;
     rows: number;
+    inc: number;
     move(direction: string): void;
     render(): {
         x: number;
@@ -46,36 +43,46 @@ interface GamePlayerType {
     }
 }
 
+interface GameObjectType {
+    pos: Record<string, number>;
+    color: Keys;
+    d: number[][];
+}
+
 interface GameType {
     columns: number;
     rows: number;
     colors: {
         [key: string]: Keys;
     };
+    inc: number;
     player: GamePlayer;
 }
 
 class GamePlayer implements GamePlayerType {
-    pos: {
-        x: number;
-        y: number;
-    };
-    rawpos: {
-        x: number;
-        y: number;
-    }
+    pos: Record<string, number>;
+    rawpos: Record<string, number>
     momentum: {
         x: number;
         y: number;
+        startpos: {
+            x: number | null;
+            y: number | null;
+        }
     } = {
             x: 0,
-            y: 0
+            y: 0,
+            startpos: {
+                x: null,
+                y: null
+            }
         };
     color: Keys;
     columns: number;
     rows: number;
     fps: number;
-    constructor(clr: Keys, columns: number, rows: number, fps: number) {
+    inc: number;
+    constructor(clr: Keys, columns: number, rows: number, fps: number, inc: number, game: GameType) {
         this.columns = columns;
         this.rows = rows;
         this.color = clr;
@@ -84,38 +91,54 @@ class GamePlayer implements GamePlayerType {
             x: Math.round((columns - 1) / 2),
             y: rows - 1
         }
+        this.inc = inc;
         this.rawpos = this.pos;
 
         // implement gravity and momentum
         setInterval(() => {
-            this.pos.y++;
-        }, 1000 / this.fps);
-
-        setInterval(() => {
-            this.rawpos.x += this.momentum.x;
-            this.rawpos.y += this.momentum.y;
-            let xm = this.momentum.x / 1.3;
-            let ym = this.momentum.y / 1.3;
-            this.momentum.x = xm > .1 ? xm : 0;
-            this.momentum.y = ym > .1 ? ym : 0;
-            this.pos.x = Math.round(this.rawpos.x);
-            this.pos.y = Math.round(this.rawpos.y);
-        }, 1000 / this.fps);
+            if (this.pos.x < 0) this.pos.x = 0;
+            if (this.pos.x > this.columns) this.pos.x = this.columns;
+            if (this.pos.y < 0) this.pos.y = 0;
+            if (this.pos.y > this.rows - 1) this.pos.y = this.rows - 1;
+            for (const dir of 'xy') {
+                // @ts-ignore
+                if (!this.momentum[dir]) continue;
+                // @ts-ignore
+                this.rawpos[dir] += this.momentum[dir];
+                // @ts-ignore
+                let momentum = this.momentum[dir];
+                if (momentum > this.inc / 2) {
+                    momentum -= momentum / 3;
+                }
+                if (momentum < -this.inc / 2) {
+                    momentum += momentum / 3;
+                }
+                // @ts-ignore
+                this.momentum[dir] = momentum;
+                // @ts-ignore
+                if (Math.round(this.momentum[dir] * 10) / 10 == 0) {
+                    // @ts-ignore
+                    this.momentum.startpos[dir] = null;
+                    // @ts-ignore
+                    this.momentum[dir] = 0;
+                }
+            }
+        }, 100);
     }
     move(direction: string) {
         if (direction == 'up') {
-            this.pos.y--;
-        } else if (direction == 'down') {
-            this.pos.y++;
+            if (this.momentum.startpos.y !== null) return;
+            this.momentum.y -= this.inc;
+            this.momentum.startpos.y = this.pos.y;
         } else if (direction == 'left') {
-            this.pos.x--;
+            if (this.momentum.startpos.x !== null) return;
+            this.momentum.x -= this.inc;
+            this.momentum.startpos.x = this.pos.x;
         } else if (direction == 'right') {
-            this.pos.x++;
+            if (this.momentum.startpos.x !== null) return;
+            this.momentum.x += this.inc;
+            this.momentum.startpos.x = this.pos.x;
         }
-        if (this.pos.x < 0) this.pos.x = 0;
-        if (this.pos.x > columns) this.pos.x = columns;
-        if (this.pos.y < 0) this.pos.y = 0;
-        if (this.pos.y > rows - 1) this.pos.y = rows - 1;
     }
     render() {
         return {
@@ -135,16 +158,18 @@ class Game implements GameType {
         bg: Keys;
     };
     fps: number;
+    inc: number;
     player: GamePlayer;
-    constructor(color: Keys, bgColor: Keys, columns: number, rows: number, fps: number) {
+    constructor(color: Keys, bgColor: Keys, columns: number, rows: number, fps: number, inc: number) {
         this.columns = columns - 1;
         this.rows = rows;
         this.fps = fps;
+        this.inc = inc;
         this.colors = {
             player: color,
             bg: bgColor
         }
-        this.player = new GamePlayer(this.colors.player, this.columns, this.rows, this.fps);
+        this.player = new GamePlayer(this.colors.player, this.columns, this.rows, this.fps, this.inc, this);
         kp.on('keypress', (key) => {
             this.player.move(key.name);
         });
@@ -155,10 +180,10 @@ class Game implements GameType {
         }
     }
     render() {
-        setInterval(() => { game.render() }, 1000 / this.fps);
+        setInterval(() => { game.renderRaw() }, 1000 / this.fps);
     }
 }
 
-const game = new Game('white', 'black', columns, rows, 10);
+const game = new Game('white', 'black', columns, rows, 60, 8);
 console.clear();
 game.render();
